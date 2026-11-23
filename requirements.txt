@@ -3,3 +3,4 @@ psycopg2-binary
 qdrant-client
 requests
 crewai
+mlflow>=3.8.0

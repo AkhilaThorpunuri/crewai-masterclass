@@ -149,7 +149,7 @@ flowchart LR
 ```powershell
 pip install uv
 uv venv --python 3.13 .venv
-uv pip install --python .venv\Scripts\python.exe crewai crewai-tools langchain-community wikipedia requests
+uv pip install --python .venv\Scripts\python.exe crewai crewai-tools langchain-community wikipedia requests mlflow
 ```
 
 Then add your key to `settings.config` in the repo root and run the check:
@@ -163,6 +163,97 @@ NVDIA_API_KEY='nvapi-...'
 ```
 
 Full details: [0.1 Setup & LLM Keys](md/00-getting-started/0_1_setup_and_keys.md).
+
+---
+
+## MLflow Tracing (Observability)
+
+All **30 high- and medium-priority scripts** in this repo include their own self-contained **MLflow Tracing** block (`mlflow.crewai.autolog()`), pre-configured to log to:
+
+- **Tracking URI:** `http://localhost:5000/`
+- **Experiment:** `crewai-masterclass`
+
+Every time you run one of those scripts, MLflow automatically records the full execution tree (agents, tasks, prompts, tool calls, retries, delegation, and timing).
+
+### 1. Start the local MLflow server
+
+In a separate terminal (from the repo root), start MLflow on port `5000`:
+
+```powershell
+.venv\Scripts\mlflow server --host 127.0.0.1 --port 5000
+```
+
+Leave it running while you execute scripts.
+
+### 2. Run any traced script
+
+Run any of the instrumented scripts as usual—no extra flags required. Great ones to try first:
+
+```powershell
+# Flow + routing loop + nested Crews
+.venv\Scripts\python code\08-flows\8_3_crews_inside_flows.py "Python tips"
+
+# Hierarchical manager delegating to 3 specialists
+.venv\Scripts\python code\07-advanced-crews\7_1_hierarchical_process.py
+
+# Parallel tasks overlapping on a Gantt timeline
+.venv\Scripts\python code\04-running-crews\4_3_agents_in_parallel.py "electric cars"
+
+# Guardrail failures + automatic retry with feedback
+.venv\Scripts\python code\06-reliable-outputs\6_2_guardrails.py
+
+# Memory remember/recall across two Crew runs
+.venv\Scripts\python code\07-advanced-crews\7_2_memory.py
+
+# RAG tool-calling agent (local Ollama + Qdrant)
+.venv\Scripts\python scripts\03_chat_with_rag.py --question "What laptops do you have in stock?"
+```
+
+<details>
+<summary><strong>Full list of all 30 traced scripts (High &amp; Medium priority)</strong></summary>
+
+**High priority (14 scripts — Flows, delegation, memory, guardrails, parallelism, RAG):**
+- `code/08-flows/8_2_routing_and_state.py`, `code/08-flows/8_3_crews_inside_flows.py`, `scripts/basic-examples/10_flow.py`
+- `code/03-crewai-basics/3_4_process_types.py`, `code/07-advanced-crews/7_1_hierarchical_process.py`, `scripts/basic-examples/07_hierarchical.py`
+- `code/07-advanced-crews/7_2_memory.py`
+- `code/06-reliable-outputs/6_2_guardrails.py`, `code/09-simple-patterns/9_5_guardrails.py`, `scripts/basic-examples/06_guardrail.py`
+- `code/04-running-crews/4_3_agents_in_parallel.py`, `code/04-running-crews/4_4_async_crews.py`, `code/09-simple-patterns/9_3_parallel_agents.py`
+- `scripts/03_chat_with_rag.py`
+
+**Medium priority (16 scripts — multi-agent relays, tools, batch kickoffs, HITL, metrics):**
+- `code/02-multi-agent-thinking/2_1_why_multi_agent.py`, `code/02-multi-agent-thinking/2_2_newsletter_pipeline.py`, `code/04-running-crews/4_2_agents_in_sequence.py`, `code/09-simple-patterns/9_2_multi_agent.py`
+- `code/01-agent-fundamentals/1_1_llm_vs_agent.py`, `code/03-crewai-basics/3_3_crewai_components.py`, `code/05-tools/5_1_types_of_tools.py`, `code/05-tools/5_2_out_of_the_box_tools.py`, `code/05-tools/5_3_third_party_tools.py`, `code/05-tools/5_4_custom_tools.py`, `scripts/basic-examples/04_custom_tool.py`, `scripts/simple-crew-agent/main.py`
+- `code/04-running-crews/4_1_kickoff_types.py`, `scripts/basic-examples/09_kickoff_for_each.py`, `code/09-simple-patterns/9_4_human_in_the_loop.py`, `scripts/basic-examples/08_llm_metrics.py`
+
+</details>
+
+### 3. Open the Traces UI
+
+1. Open **[http://localhost:5000/](http://localhost:5000/)** in your browser.
+2. Click the **`crewai-masterclass`** experiment in the left sidebar.
+3. Switch to the **Traces** tab.
+4. Click any row (trace) to open the **Trace Tree**, **Timeline (Gantt)**, and **Inputs / Outputs** inspector.
+
+### 4. What's inside a trace & how to read it
+
+Each trace is a **tree of spans**—every span is one step in your program's run:
+
+| Span / Field | What it represents | What to check |
+|---|---|---|
+| **Root (`Flow` / `Crew.kickoff`)** | The entire run from start to finish | Total wall-clock time, final status (`OK` vs `ERROR`), overall inputs and final output |
+| **`Task` spans** | Each CrewAI `Task` executed | Order of execution, how prior task output (`context=[...]`) was injected into the next task |
+| **`Agent` spans** | One agent's work on a task | Which role ran, how many think/act iterations it took |
+| **`LLM` spans** | Every individual model call | Exact **system + user prompt** CrewAI built, raw model response, **latency**, and **token counts** (prompt / completion / total) |
+| **`Tool` spans** | Every tool invocation (`@tool`, `BaseTool`, or built-in delegation tools) | Exact **arguments** the agent chose to pass and the **result** returned back to the agent |
+| **Timeline / Gantt view** | Horizontal bars showing start and end times | Spot bottlenecks (slowest LLM call) and confirm parallel tasks (`4_3`, `9_3`, `4_4`) actually overlap |
+
+#### What to look for in specific patterns
+- **Flows & routing (`8_2`, `8_3`, `10_flow`):** Expand the root Flow span to see each `@start` / `@router` / `@listen` step and how many times a `"revise"` loop re-ran the writing Crew.
+- **Hierarchical crews (`3_4`, `7_1`, `07_hierarchical`):** Look for `"Delegate work to coworker"` tool spans under the manager agent—you can see how the manager broke down the brief and how many extra LLM calls coordination cost.
+- **Guardrails (`6_2`, `9_5`, `06_guardrail`):** You'll see multiple `LLM` spans inside the same `Task`—inspect the prompt of attempt #2 to see the exact guardrail feedback CrewAI injected.
+- **Parallel & async (`4_3`, `4_4`, `9_3`):** Switch to the **Timeline** view to see `async_execution=True` tasks running side by side and the final judge/summary task starting only after both finish.
+- **Memory (`7_2`):** Notice the extra hidden LLM/memory spans before and after each task where CrewAI extracts facts, saves them, and recalls them into Run 2's prompt.
+- **RAG (`03_chat_with_rag.py`):** Open the `product_catalog_search` **Tool** span to see the exact query sent to Qdrant and the retrieved product chunks, then compare them with the following **LLM** span to verify the answer is grounded in retrieved data.
 
 ---
 

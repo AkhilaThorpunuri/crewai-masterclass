@@ -12,6 +12,8 @@ Usage:
 """
 
 import argparse
+import atexit
+import os
 import sys
 from pathlib import Path
 
@@ -23,6 +25,14 @@ sys.stderr.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common import config, ollama_client  # noqa: E402  (must run before crewai import - sets telemetry env vars)
+
+os.environ.pop("OTEL_SDK_DISABLED", None)
+import mlflow  # noqa: E402
+
+mlflow.set_tracking_uri("http://localhost:5000/")
+mlflow.set_experiment("crewai-masterclass")
+mlflow.crewai.autolog()
+atexit.register(mlflow.flush_trace_async_logging)
 
 from crewai import LLM, Agent, Crew, Process, Task  # noqa: E402
 from crewai.tools import BaseTool  # noqa: E402

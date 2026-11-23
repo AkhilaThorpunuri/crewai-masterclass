@@ -21,8 +21,15 @@ import warnings
 from pathlib import Path
 
 os.environ.setdefault("CREWAI_DISABLE_TELEMETRY", "true")
-os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 sys.stdout.reconfigure(encoding="utf-8")
+
+import atexit
+import mlflow
+
+mlflow.set_tracking_uri("http://localhost:5000/")
+mlflow.set_experiment("crewai-masterclass")
+mlflow.crewai.autolog()
+atexit.register(mlflow.flush_trace_async_logging)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from crewai import LLM, Agent, Crew, Task
