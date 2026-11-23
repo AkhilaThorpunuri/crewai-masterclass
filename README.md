@@ -266,3 +266,4 @@ Each trace is a **tree of spans**—every span is one step in your program's run
 | [topics/](topics/01-foundations.md) | Deep-dive reference notes (11 topics, incl. testing, deployment, LLM integration) |
 | [crew-ai.md](crew-ai.md) | Installation notes and the topic checklist |
 | [rag-building.md](rag-building.md) | Build a RAG pipeline (Postgres + Qdrant + local Ollama), with scripts in [scripts/](scripts/) |
+| [tutorials/](tutorials/README.md) | Multi-agent CrewAI + MCP Question-Answering project (PostgreSQL, Websites, PDFs, MinIO, Elasticsearch) with its own MLflow experiment (`Tinitiate-MCP-PostgreSQL-MinIO-QA`) |
